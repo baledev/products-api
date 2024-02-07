@@ -1,1 +1,1 @@
-Golang REST API building with Go Fiber Framework
+Products REST API building with Go Fiber Framework

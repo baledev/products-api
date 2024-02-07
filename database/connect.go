@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"baledev.com/fiber-api/config"
-	"baledev.com/fiber-api/model"
+	"baledev.com/products-api/config"
+	"baledev.com/products-api/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -20,13 +20,13 @@ func ConnectDB() {
 	}
 
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", config.Config("DB_HOST"), port, config.Config("DB_USER"), config.Config("DB_PASSWORD"), config.Config("DB_NAME"))
-	DB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
 		panic("failed to connect to postgres database")
 	}
 
 	fmt.Println("Conection Opened to Database")
-	DB.AutoMigrate(&model.Product{}, &model.User{})
+	DB.AutoMigrate(&models.Category{}, &models.Product{}, &models.User{})
 	fmt.Println("Database Migrated")
 }

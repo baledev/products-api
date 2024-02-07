@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"baledev.com/fiber-api/config"
+	"baledev.com/products-api/config"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 )

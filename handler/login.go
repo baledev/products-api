@@ -5,9 +5,9 @@ import (
 	"net/mail"
 	"time"
 
-	"baledev.com/fiber-api/config"
-	"baledev.com/fiber-api/database"
-	"baledev.com/fiber-api/model"
+	"baledev.com/products-api/config"
+	"baledev.com/products-api/database"
+	"baledev.com/products-api/models"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -19,11 +19,10 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func getUserByEmail(e string) (*model.User, error) {
-	db := database.DB
-	var user model.User
+func getUserByEmail(e string) (*models.User, error) {
+	var user models.User
 
-	if err := db.Where(&model.User{Email: e}).Find(&user).Error; err != nil {
+	if err := database.DB.Where(&models.User{Email: e}).Find(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -32,10 +31,9 @@ func getUserByEmail(e string) (*model.User, error) {
 	return &user, nil
 }
 
-func getUserByUsername(u string) (*model.User, error) {
-	db := database.DB
-	var user model.User
-	if err := db.Where(&model.User{Username: u}).Find(&user).Error; err != nil {
+func getUserByUsername(u string) (*models.User, error) {
+	var user models.User
+	if err := database.DB.Where(&models.User{Username: u}).Find(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -51,21 +49,9 @@ func isEmail(email string) bool {
 }
 
 func Login(c *fiber.Ctx) error {
-	type LoginInput struct {
-		Identity string `json:"identity"`
-		Password string `json:"password"`
-	}
-	type UserData struct {
-		ID       uint   `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
+	var payload *models.LoginInput
 
-	input := new(LoginInput)
-	var userData UserData
-
-	if err := c.BodyParser(&input); err != nil {
+	if err := c.BodyParser(&payload); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status":  "error",
 			"message": "Error on login request",
@@ -73,32 +59,41 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
-	identity := input.Identity
-	pass := input.Password
-	userModel, err := new(model.User), *new(error)
-
-	if isEmail(identity) {
-		userModel, err = getUserByEmail(identity)
-	} else {
-		userModel, err = getUserByUsername(identity)
+	if err := models.ValidateStruct(payload); err != nil {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(err)
 	}
 
-	if userModel == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+	user, err := new(models.User), *new(error)
+
+	if isEmail(payload.Identity) {
+		user, err = getUserByEmail(payload.Identity)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Email doesn't match our credential",
+				"errors":  err,
+			})
+		}
+	} else {
+		user, err = getUserByUsername(payload.Identity)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Username doesn't match our credential",
+				"errors":  err,
+			})
+		}
+	}
+
+	if user == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"status":  "error",
 			"message": "User not found",
 			"data":    err,
 		})
-	} else {
-		userData = UserData{
-			ID:       userModel.ID,
-			Username: userModel.Username,
-			Email:    userModel.Email,
-			Password: userData.Password,
-		}
 	}
 
-	if !CheckPasswordHash(pass, userData.Password) {
+	if !CheckPasswordHash(payload.Password, user.Password) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"status":  "error",
 			"message": "Invalid password",
@@ -109,8 +104,8 @@ func Login(c *fiber.Ctx) error {
 	token := jwt.New(jwt.SigningMethodHS256)
 
 	claims := token.Claims.(jwt.MapClaims)
-	claims["username"] = userData.Username
-	claims["user_id"] = userData.ID
+	claims["username"] = user.Username
+	claims["user_id"] = user.ID
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 
 	t, err := token.SignedString([]byte(config.Config("SECRET")))
